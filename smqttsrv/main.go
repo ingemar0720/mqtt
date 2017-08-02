@@ -2,20 +2,15 @@ package main
 
 import (
 	"crypto/tls"
-	"github.com/jeffallen/mqtt"
+	"crypto/x509"
+	"io/ioutil"
 	"log"
+
+	"github.com/ingemar0720/mqtt"
 )
 
-// See http://mosquitto.org/man/mosquitto-tls-7.html for how to make the
-// server.{crt,key} files. Then use mosquitto like this to talk to it:
-//
-//   mosquitto_sub  --cafile ca.crt --tls-version tlsv1 -p 8883
-//
-// tls-version is required, because Go's TLS is limited to TLS 1.0, but
-// OpenSSL will try to ask for TLS 1.2 by default.
-
 func readCert() []tls.Certificate {
-	c, err := tls.LoadX509KeyPair("server.crt", "server.key")
+	c, err := tls.LoadX509KeyPair("./cert_pub.pem", "./key_pub.pem")
 	if err != nil {
 		panic(err)
 	}
@@ -23,9 +18,37 @@ func readCert() []tls.Certificate {
 }
 
 func main() {
+
+	certPubBytes, err := ioutil.ReadFile("./cert_pub.pem")
+	if err != nil {
+		log.Fatalln("Unable to read cert.pem", err)
+	}
+
+	certSubBytes, err := ioutil.ReadFile("./cert_sub.pem")
+	if err != nil {
+		log.Fatalln("Unable to read cert.pem", err)
+	}
+
+	clientCertPool := x509.NewCertPool()
+	if ok := clientCertPool.AppendCertsFromPEM(certPubBytes); !ok {
+		log.Fatalln("Unable to add publish certificate to certificate pool")
+	}
+
+	ok := clientCertPool.AppendCertsFromPEM(certSubBytes)
+	if ok != true {
+		log.Fatalln("Unable to add subscribe certificate to certificate pool")
+	}
+
 	cfg := &tls.Config{
 		Certificates: readCert(),
 		NextProtos:   []string{"mqtt"},
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		// Ensure that we only use our "CA" to validate certificates
+		ClientCAs: clientCertPool,
+		// Force it server side
+		PreferServerCipherSuites: true,
+		// TLS 1.2 because we can
+		MinVersion: tls.VersionTLS12,
 	}
 	l, err := tls.Listen("tcp", ":8883", cfg)
 	if err != nil {

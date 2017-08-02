@@ -16,6 +16,7 @@ import (
 	"time"
 
 	proto "github.com/huin/mqtt"
+	"github.com/ingemar0720/mqtt/lib"
 )
 
 // A random number generator ready to make client-id's, if
@@ -370,6 +371,7 @@ func NewServer(l net.Listener) *Server {
 // Start makes the Server start accepting and handling connections.
 func (s *Server) Start() {
 	go func() {
+		go IoT.CheckAlive()
 		for {
 			conn, err := s.l.Accept()
 			if err != nil {
@@ -592,6 +594,7 @@ func (c *incomingConn) reader() {
 				log.Printf("reader: invalid MessageId in PUBLISH.")
 				return
 			}
+			IoT.RegisterSBC(m.TopicName, m.Payload)
 			if isWildcard(m.TopicName) {
 				log.Print("reader: ignoring PUBLISH with wildcard topic ", m.TopicName)
 			} else {
